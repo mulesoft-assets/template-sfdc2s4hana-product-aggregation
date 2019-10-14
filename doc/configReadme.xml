@@ -1,0 +1,103 @@
+<?xml version="1.0"?>
+<configuration>
+	<placeholders>
+		<placeholder id="template_name">Salesforce and SAP S/4HANA Product Aggregation</placeholder>
+	</placeholders>
+	<sections>
+		<section id="use_case">
+			<![CDATA[
+I want to aggregate products from Salesforce and SAP S/4HANA and compare them to see which can only be found in one of the two and which products are in both systems.
+
+This template generates the result as a CSV report that is sent by email to addresses you can configure.
+
+This template gets products from Salesforce and SAP S/4HANA, compares by the name of the products, and generates a CSV file which shows products in Salesforce, products in SAP S/4HANA and in both systems. The report is then emailed to a configured group of email addresses.
+]]>
+		</section>
+		<section id="considerations">
+
+To make this template run, there are certain preconditions that must be considered. All of them deal with the preparations in both source (SAP S/4HANA) and destination (SFDC) systems, that must be made for the template to run smoothly. Failing to do so can lead to unexpected behavior of the template.
+
+Before you continue with the use of this template, you may want to check out this [Documentation Page](https://docs.mulesoft.com/connectors/sap/sap-s4hana-cloud-connector), that teaches you how to work with SAP S/4HANA and Anypoint Studio.
+
+		</section>
+		<section id="running_on_studio">
+After you import your template into Anypoint Studio, follow these steps to run it:
+
++ Locate the properties file `mule.dev.properties`, in src/main/resources.
++ Complete all the properties required as per the examples in the "Properties to Configure" section.
++ Right click the template project folder.
++ Hover your mouse over `Run as`.
++ Click `Mule Application (configure)`.
++ Inside the dialog, select Environment and set the variable `mule.env` to the value `dev`.
++ Click `Run`.
+To make this template run on Studio there are a few extra steps that needs to be made.
+Check this Documentation Page: [Enabling Your Studio Project for SAP S/4HANA](https://docs.mulesoft.com/connectors/sap/sap-s4hana-cloud-connector#configuring-the-connector-in-studio-7).
+		
+		</section>
+		<section id="application_configuration">
+			<![CDATA[
+### HTTP Connector Configuration
+
++ http.port `9090` 
+ 
+### Salesforce Connector Configuration
+
++ sfdc.username `bob.dylan@sfdc`
++ sfdc.password `DylanPassword123`
++ sfdc.securityToken `avsfwCUl7apQs56Xq2AKi3X`
+
+### SAP4HANA Connector Configuration**
+
++ s4hana.baseUrl `your.sap4hana.address.com`
++ s4hana.username `your.sap4hana.username`
++ s4hana.password `your.sap4hana.password`
+
+### SMTP Services Configuration
+
++ smtp.host `smtp.example.com`
++ smtp.port `587`
++ smtp.user `exampleuser@example.com`
++ smtp.password `ExamplePassword456`
+
+### Email Details
+
++ mail.from `exampleuser@example.com`
++ mail.to `woody.guthrie@example.com`
++ mail.subject `SFDC and SAP S/4HANA Products Aggregation Report`
++ mail.body `Report comparing products from Salesforce and SAP S/4HANA`
++ attachment.name `ProductsReport.csv`
+]]>
+		</section>
+		<section id="api_calls">
+		<![CDATA[
+Salesforce imposes limits on the number of API calls that can be made. However, this template
+only makes one API call to Salesforce during aggregation.
+]]>
+		</section>
+		<section id="default_endpoints_xml">
+		<![CDATA[
+This is the file where you find the endpoint to start the aggregation. This template uses an HTTP Listener to trigger the use case.
+
+$H$H# Trigger Flow
+**HTTP Listener** - Start Report Generation
++ `${http.port}` is set as a property to be defined either on a property file or in CloudHub environment variables.
++ The path configured by default is `generatereport` and you are free to change as you prefer.
++ The host name for all endpoints in your CloudHub configuration is `localhost`. CloudHub then routes requests from your application domain URL to the endpoint.
+]]>
+		</section>
+		<section id="default_business_logic_xml">
+		<![CDATA[
+The functional aspect of the template is implemented in this XML, directed by one flow responsible for conducting the aggregation of data, comparing records, and finally formatting the output as a CSV report.
+Using the Scatter-Gather component, this template queries the data in different systems. After that the aggregation is implemented in a DataWeave 2 script using the Transform component.
+
+Aggregated results are sorted by:
+
+1. Products in Salesforce only.
+2. Products in SAP S4HANA onkly.
+3. Products in both Salesforce and SAP S4HANA.
+
+The result is transformed to CSV format. The final report in CSV format is sent to the email addresses  you configured in the `mule.*.properties` file.
+]]>
+		</section>
+	</sections>
+</configuration>

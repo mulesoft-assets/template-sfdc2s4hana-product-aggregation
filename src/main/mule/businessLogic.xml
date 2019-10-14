@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:s4hana="http://www.mulesoft.org/schema/mule/s4hana" xmlns:email="http://www.mulesoft.org/schema/mule/email" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+    xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/email http://www.mulesoft.org/schema/mule/email/current/mule-email.xsd
+http://www.mulesoft.org/schema/mule/s4hana http://www.mulesoft.org/schema/mule/s4hana/current/mule-s4hana.xsd">
+
+    <flow name="mainFlow" doc:id="d9bc6a14-9ac7-4b81-bb9d-ec2c576e7d2f">
+        <flow-ref doc:name="Call businessLogicFlow" doc:id="5ab7abc6-9a42-47b8-b449-dfe03d5906fa" name="businessLogicFlow" />
+        <error-handler>
+            <on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="3ad1bf55-7b4d-483a-afd2-5ec0069a3277" type="ANY">
+                <flow-ref doc:name="errorHandlingFlow" doc:id="56f31782-a1d2-4954-8e03-87738318f55a" name="errorHandlingFlow" />
+            </on-error-propagate>
+        </error-handler>
+    </flow>
+
+    <flow name="businessLogicFlow" doc:id="20625294-79d3-45a3-90bd-9b44970bc67b">
+        <set-payload value="[]" doc:name="Set Payload to avoid issue with scatter-gather" doc:id="9e95002b-eb0e-41f5-ba5f-3636e1d4c822" />
+        <scatter-gather doc:name="Scatter-Gather" doc:id="062ec4ac-b3c3-49f7-94b4-cea2462cf09b">
+            <route>
+                <salesforce:query doc:name="Query all products from Salesforce" doc:id="d97f8d00-2a6d-40e1-b2e4-34acdb69e47a" config-ref="Salesforce_Config">
+                    <salesforce:salesforce-query>SELECT Id, Name FROM Product2</salesforce:salesforce-query>
+                </salesforce:query>
+            </route>
+            <route>
+                <s4hana:query doc:name="Get all products from SAP S/4HANA" doc:id="1df42f96-320e-4b5f-8d6a-823e651ceb5b" config-ref="SAP_S_4HANA_Config" service="API_PRODUCT_SRV"
+                    entityType="A_Product" select="Product,ProductType" />
+            </route>
+        </scatter-gather>
+        <ee:transform doc:name="Transform Collection to CSV" doc:id="7668acb0-da18-4df8-92a8-0bc58c5ad88b">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/csv separator=",", header=true
+import mergeWith from dw::core::Objects
+var productsSFDC = payload["0"].payload map (product) -> {
+	"Name": product.Name,
+	"IDInSFDC": product.Id
+}
+var productsS4HANA = payload["1"].payload map (product) -> {
+	"Name": product.ProductType ++ " " ++ product.Product,
+	"IDInS4HANA": product.Product
+}
+var mergedProducts =  (
+                productsSFDC map ((item) -> item mergeWith ((productsS4HANA filter ($.Name == item.Name))[0] 
+                    default {IDInS4HANA: ""}
+                ))
+            ) distinctBy $.Name
+            ++ (
+                productsS4HANA map ((item) -> item mergeWith ((productsSFDC filter ($.Name == item.Name))[0] 
+                    default {IDInSFDC: ""}
+                ))
+            ) distinctBy $.Name
+fun sortBySourceExistence (products) = ((products map (product) -> (
+        product ++ {
+            sortValue:  if ((product.IDInSFDC != "") and (product.IDInS4HANA == "")) 1 
+                        else if ((product.IDInS4HANA != "") and (product.IDInSFDC == "")) 2 
+                        else 3
+        }
+    )
+) orderBy $.sortValue ) map $ -"sortValue"
+---
+sortBySourceExistence(mergedProducts) map (product) -> {
+	"Name": product.Name,
+	"IDInSFDC": product.IDInSFDC,
+	"IDInS4HANA": product.IDInS4HANA
+ }]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <email:send config-ref="Gmail_SMTP" doc:name="Send migration result email" doc:id="c1d928ed-2fcf-4189-bae9-463ce1a39169" fromAddress="${mail.from}" subject="${mail.subject}">
+            <email:to-addresses>
+                <email:to-address value="${mail.to}" />
+            </email:to-addresses>
+            <email:body contentType="text/plain">
+                <email:content><![CDATA[#[p('mail.body')]]]></email:content>
+            </email:body>
+            <email:attachments><![CDATA[#[{'${attachment.name}' : payload}]]]></email:attachments>
+        </email:send>
+    </flow>
+</mule>
