@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:s4hana="http://www.mulesoft.org/schema/mule/s4hana" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:munit="http://www.mulesoft.org/schema/mule/munit" xmlns:munit-tools="http://www.mulesoft.org/schema/mule/munit-tools"
+    xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+    xsi:schemaLocation="
+		http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+		http://www.mulesoft.org/schema/mule/munit http://www.mulesoft.org/schema/mule/munit/current/mule-munit.xsd
+		http://www.mulesoft.org/schema/mule/munit-tools  http://www.mulesoft.org/schema/mule/munit-tools/current/mule-munit-tools.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/s4hana http://www.mulesoft.org/schema/mule/s4hana/current/mule-s4hana.xsd">
+    <munit:config name="test-suite.xml" />
+    <configuration-properties doc:name="Configuration properties" doc:id="501dc361-da6d-4c20-9f76-fae19bcbf629" file="mule.test.properties" />
+    <munit:before-test name="test-suiteBefore_Test" description="Before tests actions" doc:id="26c85ec4-3bfc-4863-a9de-e06ef3d70448">
+        <ee:transform doc:name="Prepare test data" doc:id="d6b03b15-c564-465f-b674-87e5fdafa7a9">
+            <ee:message />
+            <ee:variables>
+                <ee:set-variable variableName="productInSfdcOnly"><![CDATA[%dw 2.0
+output application/java
+---
+"Test product Salesforce" ++ randomInt(1000)]]></ee:set-variable>
+                <ee:set-variable variableName="productInS4HANAOnly"><![CDATA[%dw 2.0
+output application/java
+---
+p('s4hana.productInS4HANAOnly')]]></ee:set-variable>
+				<ee:set-variable variableName="productInBothSystems" ><![CDATA[%dw 2.0
+output application/java
+---
+p('s4hana.productInBothSystems')]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+        <ee:transform doc:name="Prepare data for Salesforce" doc:id="177fef1d-16a4-4f88-a7e5-ddfb21712a27">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+[
+	{
+		"Name": vars.productInSfdcOnly
+	},
+	{
+		"Name": vars.productInBothSystems
+	}
+]]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+        <salesforce:create type="Product2" doc:name="Create Products in Salesforce" doc:id="3a29a76f-9ef6-408e-b08d-4f09a8a71cf7" config-ref="Salesforce_Config" />
+        <ee:transform doc:name="Store IDs to variable sfdcIds" doc:id="86c7195c-5e71-49bf-b2cc-f941b2f67e70">
+            <ee:message />
+            <ee:variables>
+                <ee:set-variable variableName="sfdcIds"><![CDATA[%dw 2.0
+output application/java
+---
+payload map ($.id)]]></ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+        <munit-tools:mock-when doc:name="Mock email processor to avoid sending email" doc:id="e3f382e9-0219-4135-9b49-38ba0fe3955f" processor="email:send" />
+    </munit:before-test>
+    <munit:test name="test-suite-businessLogicFlowTest" description="Test" doc:id="0274d763-2635-4217-97a5-192d3d545d68">
+        <munit:execution>
+            <flow-ref doc:name="Call businessLogicFlow" doc:id="d93face2-e35b-4cad-a76f-cc72750112a8" name="businessLogicFlow" />
+			<ee:transform doc:name="Filtering test records" doc:id="eb2ee29d-96a7-4de0-b21b-308652f1c0e9">
+                <ee:message>
+                    <ee:set-payload><![CDATA[%dw 2.0
+output application/java
+---
+payload filter ($.Name == vars.productInSfdcOnly or $.Name == vars.productInS4HANAOnly or $.Name == vars.productInBothSystems)]]></ee:set-payload>
+                </ee:message>
+            </ee:transform>
+        </munit:execution>
+        <munit:validation>
+            <munit-tools:assert-that doc:name="Assert number of records" doc:id="c7c65961-68a2-48a2-b031-0deb3cdbfd1c" expression="#[sizeOf(payload)]"
+                is="#[MunitTools::equalTo(3)]" message="Assert number of records" />
+            <munit-tools:assert-that doc:name="Assert that the first record is correct" doc:id="eb976d9f-bc06-400e-90b4-09cd088f32ce" expression="#[payload[0].Name]"
+                is="#[MunitTools::equalTo(vars.productInSfdcOnly)]" message="The first record is incorrect" />
+            <munit-tools:assert-that doc:name="Assert that the first record exists in Salesforce" doc:id="a6271bfd-291f-43ca-9f40-0e1eadd42690" expression="#[payload[0].IDInSFDC]"
+                is="#[MunitTools::not(MunitTools::isEmptyOrNullString())]" message="The first record doesn't exist in Salesforce" />
+            <munit-tools:assert-that doc:name="Assert that the first record does not exist in S4HANA" doc:id="36439f62-4d5f-4cb9-9ff7-08ce922c4a12"
+                expression="#[payload[0].IDInS4HANA]" is="#[MunitTools::isEmptyOrNullString()]" message="The first record exists in instance S4HANA" />
+            <munit-tools:assert-that doc:name="Assert that the second record is correct" doc:id="183dc174-96a7-41da-945b-8326f4663547" expression="#[payload[1].Name]"
+                is="#[MunitTools::equalTo(vars.productInS4HANAOnly)]" message="The second record is incorrect" />
+            <munit-tools:assert-that doc:name="Assert that the secord record does not exist in Salesforce" doc:id="df4a12aa-5658-4334-976e-06d3b74364ae"
+                expression="#[payload[1].IDInSFDC]" is="#[MunitTools::isEmptyOrNullString()]" message="The second record exists in Salesforce" />
+            <munit-tools:assert-that doc:name="Assert that the secord record exists in S4HANA" doc:id="b9c91b6b-ed13-4314-900f-c19f4b3e4616" expression="#[payload[1].IDInS4HANA]"
+                is="#[MunitTools::not(MunitTools::isEmptyOrNullString())]" message="The second record doesn't exist in S4HANA" />
+            <munit-tools:assert-that doc:name="Assert that the third record is correct" doc:id="4bbf8666-3b85-4061-8147-546176660b1f" expression="#[payload[2].Name]"
+                is="#[MunitTools::equalTo(vars.productInBothSystems)]" message="The third record is incorrect" />
+            <munit-tools:assert-that doc:name="Assert that the third record exists in Salesforce" doc:id="feb94ba6-4393-47dc-9fee-8c4c01ebb063" expression="#[payload[2].IDInSFDC]"
+                is="#[MunitTools::not(MunitTools::isEmptyOrNullString())]" message="The third record doesn't exist in Salesforce" />
+            <munit-tools:assert-that doc:name="Assert that the third record exists in S4HANA" doc:id="dc79ea31-63ba-488f-b3b0-edd5370af628" expression="#[payload[2].IDInS4HANA]"
+                is="#[MunitTools::not(MunitTools::isEmptyOrNullString())]" message="The third record doesn't exist in S4HANA" />
+        </munit:validation>
+    </munit:test>
+    <munit:after-test name="test-suiteAfter_Test" description="After tests actions" doc:id="842c977b-04ca-49be-bfad-936c7ba72185">
+        <salesforce:delete doc:name="Delete test data from Salesforce" doc:id="54eb0800-e7de-40e4-8454-99d5378b8fe9" config-ref="Salesforce_Config">
+            <salesforce:delete-ids><![CDATA[#[vars.sfdcIds]]]></salesforce:delete-ids>
+        </salesforce:delete>
+    </munit:after-test>
+</mule>
