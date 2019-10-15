@@ -8,10 +8,10 @@
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>template-sfdc2s4hana-account-aggregation</artifactId>
+    <artifactId>template-sfdc2s4hana-product-aggregation</artifactId>
     <version>2.1.0-SNAPSHOT</version>
     <packaging>mule-application</packaging>
-    <name>template-sfdc2s4hana-account-aggregation</name>
+    <name>template-sfdc2s4hana-product-aggregation</name>
 
     <build>
         <plugins>
