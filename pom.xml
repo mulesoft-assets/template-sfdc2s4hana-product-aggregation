@@ -100,4 +100,4 @@
         </repository>
     </repositories>
 
-</project>
+<scm><connection>scm:git:git@github.com:mulesoft/template-sfdc2s4hana-product-aggregation.git</connection><developerConnection>scm:git:git@github.com:mulesoft/template-sfdc2s4hana-product-aggregation.git</developerConnection><url>https://github.com/mulesoft/template-sfdc2s4hana-product-aggregation</url><tag>HEAD</tag></scm></project>
